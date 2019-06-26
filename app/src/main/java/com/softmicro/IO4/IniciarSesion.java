@@ -187,14 +187,13 @@ public class IniciarSesion extends AppCompatActivity implements
                         }
                         else
                         {
-                            dialog.dismiss();
-                            findViewById(R.id.btnRecoveryPass).setVisibility(View.VISIBLE);
                             mIngCorreo.setError(" ");
                             mIngPass.setError("¡Error de cuenta o contraseña!");
                             //Si pasa hasta aquí, hubo error al iniciar sesión.
                             Log.w(TAG, "Fallo al iniciar sesión", task.getException());
                             Toast.makeText(IniciarSesion.this, "Error al iniciar sesión, intenta nuevamente.", Toast.LENGTH_SHORT).show();
                             updateUI(null);
+                            dialog.dismiss();
                         }
                     }
                 });
@@ -224,10 +223,6 @@ public class IniciarSesion extends AppCompatActivity implements
                 startActivity(new Intent(IniciarSesion.this, RegistrarUsuario.class));
                 finish();
                 break;
-            // case R.id.lblSignUp://Botón volver a registrarse
-            //     startActivity(new Intent(IniciarSesion.this, RegistrarUsuario.class));
-            //     finish();
-            //     break;//lblSignUp
         }
     }
     private void updateUI(FirebaseUser user) {

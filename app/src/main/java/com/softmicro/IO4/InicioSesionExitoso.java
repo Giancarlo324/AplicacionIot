@@ -4,16 +4,21 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Toolbar;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -22,8 +27,12 @@ import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.ChildEventListener;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.iid.InstanceIdResult;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -33,27 +42,27 @@ import java.util.ArrayList;
 
 import dmax.dialog.SpotsDialog;
 
-public class InicioSesionExitoso extends AppCompatActivity implements
-        View.OnClickListener {
+public class InicioSesionExitoso extends AppCompatActivity{
 
-    private GoogleSignInClient clienteGoogle;
+    private static final String TAG = "";
+    //Firebase
     FirebaseAuth mAuth;
     private GoogleSignInClient mGoogleSignInClient;
+    //Base de datos firebase.
+    DatabaseReference mFirebaseDatabase;
+    FirebaseDatabase mFirebaseInstance;
     //
-    String token, token2;
+    String token;
     //Alert
     android.app.AlertDialog dialog;
     //
-    FirebaseDatabase firebaseDatabase;
-    DatabaseReference databaseReference;
-    //
+    private ArrayList<String> arrayList = new ArrayList<>();
+    private ArrayAdapter<String> adapter;
     ListView listaToken;
     //
-    private static final String TAG = "";
     TextView mDatos;
     private String correo, uid, DisplayName, phone, photo;
-    //Datos
-    private DatabaseReference mFirebaseDatabase;
+    private androidx.appcompat.widget.Toolbar toolbar;
 
 
     @Override
@@ -61,8 +70,22 @@ public class InicioSesionExitoso extends AppCompatActivity implements
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_inicio_sesion_exitoso);
 
+        toolbar = (androidx.appcompat.widget.Toolbar)findViewById(R.id.myToolbar);
+        setSupportActionBar(toolbar);
+
         // Detectar usuario actual.
         mAuth = FirebaseAuth.getInstance();
+        // Configuración de Google Sign In
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(getString(R.string.default_web_client_id))
+                .requestEmail()
+                .build();
+
+        mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
+        //Base de datos
+        mFirebaseInstance = FirebaseDatabase.getInstance();
+        mFirebaseDatabase = mFirebaseInstance.getReference("Usuarios");
+        uid = mAuth.getCurrentUser().getUid();
         //Alert
         dialog = new SpotsDialog.Builder()
                 .setContext(this)
@@ -72,6 +95,9 @@ public class InicioSesionExitoso extends AppCompatActivity implements
         //
         mDatos = (TextView)findViewById(R.id.txt_datos);
         listaToken = (ListView)findViewById(R.id.list_token);
+
+        correo = mAuth.getCurrentUser().getEmail();
+
         //token
         FirebaseInstanceId.getInstance().getInstanceId()
                 .addOnCompleteListener(new OnCompleteListener<InstanceIdResult>() {
@@ -83,6 +109,7 @@ public class InicioSesionExitoso extends AppCompatActivity implements
                         }
 
                         // Get new Instance ID token
+                        dialog.show();
                         token = task.getResult().getToken();
                         registrarToken(token);
 
@@ -92,52 +119,70 @@ public class InicioSesionExitoso extends AppCompatActivity implements
                     }
                 });
 
-        //
-
-        // Configuración de Google Sign In
-        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(getString(R.string.default_web_client_id))
-                .requestEmail()
-                .build();
-
-        mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
-
-        correo = mAuth.getCurrentUser().getEmail();
-        uid = mAuth.getCurrentUser().getUid();
-
         mDatos.setText("Correo:" + correo + "\n UID: " + uid);
-
-        findViewById(R.id.sign_out_button).setOnClickListener(this);
-        findViewById(R.id.sign_out_button).setEnabled(true);
+        adapter = new ArrayAdapter(this, android.R.layout.simple_list_item_1, arrayList);
+        listenToken();
     }
 
     private void registrarToken(String token) {
+        //Aquí agrego al usuario
+        addUser(correo, token);
+        listaToken.setAdapter(adapter);
+        mFirebaseDatabase.addChildEventListener(new ChildEventListener() {
+            @Override
+            public void onChildAdded(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+                String add = dataSnapshot.child("Token").getValue().toString();
+                arrayList.add(add);
 
-        firebaseDatabase = FirebaseDatabase.getInstance();
-        databaseReference = firebaseDatabase.getReference("Usuarios");
+                adapter.notifyDataSetChanged();
+                dialog.dismiss();
+            }
 
-        databaseReference.child(uid).child("Email").setValue(correo);
-        databaseReference.child(uid).child("Token").setValue(token);
+            @Override
+            public void onChildChanged(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+            }
 
-        final ArrayList<String> tokenlist = new ArrayList<>();
-        tokenlist.add(token);
+            @Override
+            public void onChildRemoved(@NonNull DataSnapshot dataSnapshot) {
+                String delete = dataSnapshot.getValue().toString();
+                arrayList.remove(delete);
 
-        ArrayAdapter arrayAdapter = new ArrayAdapter(this, android.R.layout.simple_list_item_1, tokenlist);
+                adapter.notifyDataSetChanged();
+                dialog.dismiss();
+            }
 
-        listaToken.setAdapter(arrayAdapter);
+            @Override
+            public void onChildMoved(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+            }
 
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+            }
+        });
+    }
+
+    //Escuchador para cada token
+    private void listenToken()
+    {
         listaToken.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                Toast.makeText(InicioSesionExitoso.this, "Notificacion se envía a: ." + tokenlist.get(position),
+                Toast.makeText(InicioSesionExitoso.this, "Notificacion se envía a: ." + arrayList.get(position),
                         Toast.LENGTH_SHORT).show();
             }
         });
     }
 
+    //Función para agregar usuario.
+    public void addUser(String email, String token)
+    {
+        User users = new User(email, token);
+        System.out.println("imprimir: "+ users.Token + " : " + users.Email);
+        mFirebaseDatabase.child(uid).setValue(users);
+    }
+
     //Base
     private void signOut() {
-        dialog.show();
         // Firebase sign out
         mAuth.signOut();
 
@@ -151,17 +196,6 @@ public class InicioSesionExitoso extends AppCompatActivity implements
                     }
                 });
         dialog.dismiss();
-    }
-
-    @Override
-    public void onClick(View v) {
-        switch (v.getId()) {
-            case R.id.sign_out_button:
-                findViewById(R.id.sign_out_button).setEnabled(false);
-                signOut();
-                break;
-            // ...
-        }
     }
 
     //Para detectar cuando pulsa hacia atrás.
@@ -183,6 +217,25 @@ public class InicioSesionExitoso extends AppCompatActivity implements
         });
         mensaje.show();
     }
+    //Toolbar
+    public boolean onCreateOptionsMenu(Menu menu)
+    {
+        getMenuInflater().inflate(R.menu.menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem menuItem) {
+        switch (menuItem.getItemId())
+        {
+            case R.id.bntCerrarses:
+                signOut();
+                break;
+        }
+
+        return true;
+    }
+
 
     private void updateUI(FirebaseUser user) {
         if(user==null)
